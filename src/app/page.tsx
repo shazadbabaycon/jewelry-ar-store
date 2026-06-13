@@ -306,10 +306,18 @@ export default function Home() {
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.95, y: 20 }}
-              className="relative w-full max-w-4xl aspect-[4/3] sm:aspect-[16/9] flex flex-col md:flex-row overflow-hidden rounded-3xl border border-white/10 bg-zinc-950 shadow-2xl"
+              className="relative w-full max-w-4xl h-[85vh] md:h-auto md:aspect-[16/9] flex flex-col md:flex-row overflow-hidden rounded-3xl border border-white/10 bg-zinc-950 shadow-2xl"
             >
+              {/* Floating Close Button - Guaranteed Visible on Mobile/Desktop */}
+              <button
+                onClick={() => setActiveTryOn(null)}
+                className="absolute top-4 right-4 z-50 p-2.5 rounded-full border border-white/15 bg-black/70 text-white hover:border-amber-400/50 hover:text-amber-400 transition-all shadow-lg active:scale-95 backdrop-blur-md"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
               {/* Left Column: The Camera Iframe View */}
-              <div className="relative flex-1 bg-black aspect-[4/3] md:aspect-auto">
+              <div className="relative flex-1 bg-black w-full min-h-[45%] md:min-h-0">
                 <iframe
                   ref={iframeRef}
                   src={
@@ -323,7 +331,7 @@ export default function Home() {
               </div>
 
               {/* Right Column: Dynamic Controller panel */}
-              <div className="w-full md:w-80 flex flex-col bg-zinc-900 border-t md:border-t-0 md:border-l border-white/5 text-zinc-100 p-6 justify-between select-none">
+              <div className="w-full md:w-80 flex flex-col bg-zinc-900 border-t md:border-t-0 md:border-l border-white/5 text-zinc-100 p-6 justify-between select-none overflow-y-auto">
                 {/* Header */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-start">
@@ -339,13 +347,6 @@ export default function Home() {
                         }).format(activeTryOn.price)}
                       </p>
                     </div>
-                    
-                    <button
-                      onClick={() => setActiveTryOn(null)}
-                      className="p-1.5 rounded-full border border-white/10 hover:border-white/20 hover:bg-white/5 transition-all md:absolute md:top-4 md:right-4"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
                   </div>
 
                   <p className="text-xs font-light leading-5 text-zinc-400">
