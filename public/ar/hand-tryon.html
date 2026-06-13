@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AURA Luxe - Hand AR Try-On</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background-color: #050505;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        color: white;
+      }
+      
+      #container {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* Viewport container that gets mirrored for natural mirror effect */
+      #viewport {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        transform: scaleX(-1); /* Mirror camera & drawing */
+      }
+
+      video, canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      
+      canvas {
+        z-index: 5;
+      }
+
+      /* Custom UI Overlay - NOT MIRRORED */
+      .ar-ui {
+        position: absolute;
+        inset: 0;
+        z-index: 100;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 24px;
+      }
+      
+      .ar-interactive {
+        pointer-events: auto;
+      }
+      
+      .top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .status-badge {
+        background: rgba(0, 0, 0, 0.7);
+        border: 1px solid rgba(212, 175, 55, 0.3);
+        color: #d4af37;
+        font-size: 11px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        padding: 8px 16px;
+        border-radius: 20px;
+        backdrop-filter: blur(10px);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .pulse-dot {
+        width: 6px;
+        height: 6px;
+        background-color: #d4af37;
+        border-radius: 50%;
+        animation: pulse 1.5s infinite;
+      }
+      
+      @keyframes pulse {
+        0% { transform: scale(0.9); opacity: 0.6; }
+        50% { transform: scale(1.3); opacity: 1; }
+        100% { transform: scale(0.9); opacity: 0.6; }
+      }
+
+      /* Tip instruction for user */
+      .instructions {
+        position: absolute;
+        top: 22%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.65);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-size: 12px;
+        text-align: center;
+        letter-spacing: 1px;
+        max-width: 280px;
+        backdrop-filter: blur(8px);
+        transition: opacity 0.5s ease;
+      }
+      
+      .action-bar {
+        display: flex;
+        justify-content: center;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      
+      .btn {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 24px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        cursor: pointer;
+        backdrop-filter: blur(12px);
+        transition: all 0.3s ease;
+      }
+      
+      .btn-primary {
+        background: linear-gradient(135deg, #f5e3a0 0%, #d4af37 50%, #b8860b 100%);
+        color: black;
+        border: none;
+        box-shadow: 0 4px 15px rgba(212, 175, 55, 0.2);
+      }
+      
+      .btn:hover {
+        transform: translateY(-2px);
+        border-color: #d4af37;
+      }
+      
+      .btn-primary:hover {
+        filter: brightness(1.1);
+      }
+      
+      #flash {
+        position: absolute;
+        inset: 0;
+        background-color: white;
+        opacity: 0;
+        z-index: 200;
+        pointer-events: none;
+      }
+
+      /* Spinner overlay */
+      #loading-screen {
+        position: absolute;
+        inset: 0;
+        background: #050505;
+        z-index: 150;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+      }
+
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(212, 175, 55, 0.1);
+        border-top: 3px solid #d4af37;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+
+      .loading-text {
+        font-size: 12px;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: #d4af37;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <!-- Loading screen -->
+      <div id="loading-screen">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loader-status">Loading Hand Tracking...</div>
+      </div>
+
+      <div id="flash"></div>
+
+      <!-- Mirrored viewport for camera and canvas -->
+      <div id="viewport">
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="ar-canvas"></canvas>
+      </div>
+
+      <!-- AR UI overlay (not mirrored, readable) -->
+      <div class="ar-ui">
+        <div class="top-bar">
+          <div class="status-badge">
+            <div class="pulse-dot"></div>
+            <span id="status-text">Scanning Hand...</span>
+          </div>
+        </div>
+
+        <div class="instructions" id="instruction-box">
+          Place your hand in front of the camera to try on the ring
+        </div>
+        
+        <div class="action-bar ar-interactive">
+          <button class="btn" id="btn-snapshot">Capture Photo</button>
+          <button class="btn btn-primary" id="btn-cart">Add to Cart</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Script imports -->
+    <script type="module">
+      import { FilesetResolver, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/vision_bundle.mjs";
+
+      let handLandmarker;
+      let webcamElement;
+      let canvasElement;
+      let canvasCtx;
+      let activeItem = '';
+      let trackingActive = false;
+      let lastVideoTime = -1;
+
+      // Color mapping for active items
+      const ringStyles = {
+        'eternal-ruby-promise': {
+          gemColor: '#e0115f', // Ruby crimson
+          bandColor: '#e5e5e5', // Platinum
+          gemSize: 7,
+          name: 'Ruby Promise'
+        },
+        'empress-emerald-ring': {
+          gemColor: '#50c878', // Emerald green
+          bandColor: '#d4af37', // Yellow gold
+          gemSize: 9,
+          name: 'Empress Emerald'
+        }
+      };
+
+      // Get item from URL query params
+      const urlParams = new URLSearchParams(window.location.search);
+      activeItem = urlParams.get('item') || 'eternal-ruby-promise';
+
+      // Setup communication with parent React App
+      window.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'CHANGE_ITEM') {
+          activeItem = event.data.itemId;
+        }
+      });
+
+      async function setupAR() {
+        webcamElement = document.getElementById("webcam");
+        canvasElement = document.getElementById("ar-canvas");
+        canvasCtx = canvasElement.getContext("2d");
+
+        try {
+          // Initialize MediaPipe FilesetResolver
+          document.getElementById('loader-status').innerText = 'Initializing AI Models...';
+          const vision = await FilesetResolver.forVisionTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
+          );
+
+          // Create Hand Landmarker
+          handLandmarker = await HandLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+              delegate: "GPU"
+            },
+            runningMode: "VIDEO",
+            numHands: 1
+          });
+
+          document.getElementById('loader-status').innerText = 'Starting Camera...';
+          await startCamera();
+          
+          // Hide loader screen
+          document.getElementById('loading-screen').style.display = 'none';
+          
+          // Start render loop
+          requestAnimationFrame(predictLoop);
+        } catch (error) {
+          console.error("Initialization error:", error);
+          document.getElementById('loader-status').innerText = 'Error loading camera / models';
+        }
+      }
+
+      async function startCamera() {
+        const constraints = {
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: "user"
+          }
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        webcamElement.srcObject = stream;
+        
+        return new Promise((resolve) => {
+          webcamElement.onloadedmetadata = () => {
+            // Resize canvas to match video stream size
+            canvasElement.width = webcamElement.videoWidth;
+            canvasElement.height = webcamElement.videoHeight;
+            resolve();
+          };
+        });
+      }
+
+      function predictLoop() {
+        // Adjust canvas dimensions if they differ from video
+        if (canvasElement.width !== webcamElement.videoWidth || canvasElement.height !== webcamElement.videoHeight) {
+          canvasElement.width = webcamElement.videoWidth;
+          canvasElement.height = webcamElement.videoHeight;
+        }
+
+        // Run detection frame-by-frame
+        if (webcamElement.currentTime !== lastVideoTime) {
+          lastVideoTime = webcamElement.currentTime;
+          
+          const startTimeMs = performance.now();
+          const results = handLandmarker.detectForVideo(webcamElement, startTimeMs);
+
+          // Clear previous canvas frame
+          canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+          if (results.landmarks && results.landmarks.length > 0) {
+            drawRingOnFinger(results.landmarks[0]);
+            
+            if (!trackingActive) {
+              trackingActive = true;
+              document.getElementById('status-text').innerText = 'Hand Tracked';
+              document.querySelector('.status-badge').style.borderColor = 'rgba(80, 200, 120, 0.4)';
+              document.querySelector('.pulse-dot').style.backgroundColor = '#50c878';
+              document.getElementById('instruction-box').style.opacity = '0';
+            }
+          } else {
+            if (trackingActive) {
+              trackingActive = false;
+              document.getElementById('status-text').innerText = 'Scanning Hand...';
+              document.querySelector('.status-badge').style.borderColor = 'rgba(212, 175, 55, 0.3)';
+              document.querySelector('.pulse-dot').style.backgroundColor = '#d4af37';
+              document.getElementById('instruction-box').style.opacity = '1';
+            }
+          }
+        }
+
+        requestAnimationFrame(predictLoop);
+      }
+
+      function drawRingOnFinger(landmarks) {
+        // Landmark 13: Ring Finger MCP (base joint)
+        // Landmark 14: Ring Finger PIP (middle joint)
+        const mcp = landmarks[13];
+        const pip = landmarks[14];
+
+        // Convert normalized coordinates to canvas pixels
+        const mcpX = mcp.x * canvasElement.width;
+        const mcpY = mcp.y * canvasElement.height;
+        const pipX = pip.x * canvasElement.width;
+        const pipY = pip.y * canvasElement.height;
+
+        // Position: 60% of the way from MCP to PIP (ideal ring position)
+        const ringX = mcpX + (pipX - mcpX) * 0.4;
+        const ringY = mcpY + (pipY - mcpY) * 0.4;
+
+        // Scale: Distance between joints dictates size
+        const dx = pipX - mcpX;
+        const dy = pipY - mcpY;
+        const fingerLen = Math.sqrt(dx * dx + dy * dy);
+        const ringRadius = fingerLen * 0.24; // Proportional ring diameter
+
+        // Rotation: Angle of the finger
+        const angle = Math.atan2(dy, dx);
+
+        // Get styled colors
+        const style = ringStyles[activeItem] || ringStyles['eternal-ruby-promise'];
+
+        canvasCtx.save();
+        canvasCtx.translate(ringX, ringY);
+        canvasCtx.rotate(angle + Math.PI / 2); // Align perpendicular to finger line
+
+        // 1. Draw Ring Band Shadow (back half of band)
+        canvasCtx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+        canvasCtx.shadowBlur = 4;
+        canvasCtx.shadowOffsetY = 2;
+
+        // 2. Draw Ring Band
+        canvasCtx.beginPath();
+        canvasCtx.ellipse(0, 0, ringRadius, ringRadius * 0.35, 0, 0, 2 * Math.PI);
+        canvasCtx.lineWidth = ringRadius * 0.28;
+        
+        // Gradient for metal
+        const bandGrad = canvasCtx.createLinearGradient(-ringRadius, 0, ringRadius, 0);
+        if (style.bandColor === '#d4af37') { // Gold
+          bandGrad.addColorStop(0, '#aa7c11');
+          bandGrad.addColorStop(0.3, '#f3e5ab');
+          bandGrad.addColorStop(0.5, '#d4af37');
+          bandGrad.addColorStop(0.7, '#f5e3a0');
+          bandGrad.addColorStop(1, '#aa7c11');
+        } else { // Platinum/Silver
+          bandGrad.addColorStop(0, '#777');
+          bandGrad.addColorStop(0.3, '#ddd');
+          bandGrad.addColorStop(0.5, '#f5f5f5');
+          bandGrad.addColorStop(0.7, '#fff');
+          bandGrad.addColorStop(1, '#777');
+        }
+        
+        canvasCtx.strokeStyle = bandGrad;
+        canvasCtx.stroke();
+
+        // 3. Draw Gemstone setting mount
+        canvasCtx.beginPath();
+        canvasCtx.arc(0, -ringRadius * 0.25, ringRadius * 0.26, 0, 2 * Math.PI);
+        canvasCtx.fillStyle = style.bandColor;
+        canvasCtx.fill();
+
+        // 4. Draw Main Gemstone
+        canvasCtx.beginPath();
+        const gemRad = ringRadius * 0.24;
+        const gemY = -ringRadius * 0.28;
+        canvasCtx.arc(0, gemY, gemRad, 0, 2 * Math.PI);
+        
+        // Gemstone gradient
+        const gemGrad = canvasCtx.createRadialGradient(-gemRad*0.2, gemY - gemRad*0.2, 1, 0, gemY, gemRad);
+        if (style.gemColor === '#e0115f') { // Ruby
+          gemGrad.addColorStop(0, '#ff6b8b');
+          gemGrad.addColorStop(0.4, '#e0115f');
+          gemGrad.addColorStop(1, '#660022');
+        } else { // Emerald
+          gemGrad.addColorStop(0, '#a8f5b8');
+          gemGrad.addColorStop(0.4, '#50c878');
+          gemGrad.addColorStop(1, '#0e4a22');
+        }
+        canvasCtx.fillStyle = gemGrad;
+        canvasCtx.fill();
+
+        // 5. Draw Sparkle Highlight (Gem facet shine)
+        canvasCtx.beginPath();
+        canvasCtx.arc(-gemRad*0.25, gemY - gemRad*0.25, gemRad*0.25, 0, 2 * Math.PI);
+        canvasCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        canvasCtx.fill();
+
+        canvasCtx.restore();
+      }
+
+      // Initialize on load
+      window.addEventListener('DOMContentLoaded', () => {
+        setupAR();
+
+        // Snapshot handler
+        document.getElementById('btn-snapshot').addEventListener('click', () => {
+          const flash = document.getElementById('flash');
+          flash.style.opacity = '1';
+          setTimeout(() => {
+            flash.style.transition = 'opacity 0.8s ease-out';
+            flash.style.opacity = '0';
+            setTimeout(() => {
+              flash.style.transition = 'none';
+            }, 800);
+          }, 100);
+
+          window.parent.postMessage({ type: 'SNAPSHOT_TAKEN' }, '*');
+        });
+
+        // Add to cart handler
+        document.getElementById('btn-cart').addEventListener('click', () => {
+          if (activeItem) {
+            window.parent.postMessage({ type: 'ADD_TO_CART', itemId: activeItem }, '*');
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

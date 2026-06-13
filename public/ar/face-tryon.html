@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AURA Luxe - Face AR Try-On</title>
+    <!-- Import A-Frame and MindAR Face Tracking -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-face-aframe.prod.js"></script>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background-color: #000;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      
+      /* Camera viewport container */
+      #container {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+      }
+      
+      /* Custom UI Overlay inside AR screen */
+      .ar-ui {
+        position: absolute;
+        inset: 0;
+        z-index: 100;
+        pointer-events: none;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 24px;
+      }
+      
+      .ar-interactive {
+        pointer-events: auto;
+      }
+      
+      /* Top bar */
+      .top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      
+      .status-badge {
+        background: rgba(0, 0, 0, 0.7);
+        border: 1px solid rgba(212, 175, 55, 0.3);
+        color: #d4af37;
+        font-size: 11px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        padding: 8px 16px;
+        border-radius: 20px;
+        backdrop-filter: blur(10px);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      
+      .pulse-dot {
+        width: 6px;
+        height: 6px;
+        background-color: #d4af37;
+        border-radius: 50%;
+        animation: pulse 1.5s infinite;
+      }
+      
+      @keyframes pulse {
+        0% { transform: scale(0.9); opacity: 0.6; }
+        50% { transform: scale(1.3); opacity: 1; }
+        100% { transform: scale(0.9); opacity: 0.6; }
+      }
+      
+      /* Action Buttons bar */
+      .action-bar {
+        display: flex;
+        justify-content: center;
+        gap: 16px;
+        margin-bottom: 24px;
+      }
+      
+      .btn {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: white;
+        padding: 12px 24px;
+        border-radius: 24px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        cursor: pointer;
+        backdrop-filter: blur(12px);
+        transition: all 0.3s ease;
+      }
+      
+      .btn-primary {
+        background: linear-gradient(135deg, #f5e3a0 0%, #d4af37 50%, #b8860b 100%);
+        color: black;
+        border: none;
+        box-shadow: 0 4px 15px rgba(212, 175, 55, 0.2);
+      }
+      
+      .btn:hover {
+        transform: translateY(-2px);
+        border-color: #d4af37;
+      }
+      
+      .btn-primary:hover {
+        filter: brightness(1.1);
+      }
+      
+      /* Camera capture flash effect */
+      #flash {
+        position: absolute;
+        inset: 0;
+        background-color: white;
+        opacity: 0;
+        z-index: 200;
+        pointer-events: none;
+      }
+      
+      /* MindAR style override to look more premium */
+      .mindar-ui-scanning {
+        background: rgba(5, 5, 5, 0.9) !important;
+      }
+      
+      .mindar-ui-scanning .main-container {
+        border-color: #d4af37 !important;
+      }
+      
+      .mindar-ui-scanning .scanning {
+        border-color: #d4af37 !important;
+        background-image: linear-gradient(to right, #d4af37 10%, rgba(0,0,0,0) 0%) !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <!-- Camera Flash element -->
+      <div id="flash"></div>
+
+      <!-- AR UI Overlay -->
+      <div class="ar-ui">
+        <div class="top-bar">
+          <div class="status-badge">
+            <div class="pulse-dot"></div>
+            <span id="status-text">Detecting Face...</span>
+          </div>
+        </div>
+        
+        <div class="action-bar ar-interactive">
+          <button class="btn" id="btn-snapshot">Capture Photo</button>
+          <button class="btn btn-primary" id="btn-cart">Add to Cart</button>
+        </div>
+      </div>
+
+      <!-- A-Frame Scene -->
+      <a-scene
+        mindar-face
+        embedded
+        color-space="sRGB"
+        renderer="colorManagement: true, physicallyCorrectLights: true"
+        vr-mode-ui="enabled: false"
+        device-orientation-permission-ui="enabled: false"
+        class="a-canvas"
+      >
+        <a-camera active="false" position="0 0 0"></a-camera>
+
+        <!-- Dynamic Lighting for premium reflections -->
+        <a-entity light="type: ambient; color: #ffffff; intensity: 0.8"></a-entity>
+        <a-entity light="type: directional; color: #fff; intensity: 1.2; castShadow: true" position="1 2 1"></a-entity>
+        <a-entity light="type: directional; color: #f3c63f; intensity: 0.6" position="-1 1.5 2"></a-entity>
+
+        <!-- Anchor 10: Forehead Accessories (Crowns, Tiaras) -->
+        <a-entity mindar-face-target="anchorIndex: 10" id="forehead-anchor">
+          <!-- AURA Empress Emerald Crown (Procedural) -->
+          <a-entity id="model-aura-empress-crown" visible="false">
+            <!-- Base Head Band -->
+            <a-torus radius="0.88" radius-tubular="0.022" arc="180" rotation="90 0 0" position="0 0.05 -0.1" material="color: #d4af37; metalness: 0.9; roughness: 0.15"></a-torus>
+            
+            <!-- Crown Arches/Points -->
+            <!-- Center Spire -->
+            <a-cone radius-bottom="0.04" radius-top="0" height="0.32" position="0 0.22 0" rotation="0 0 0" material="color: #d4af37; metalness: 0.95; roughness: 0.1"></a-cone>
+            <a-sphere radius="0.038" position="0 0.38 0.02" material="color: #03c03c; emissive: #028a2c; intensity: 0.8; roughness: 0.1"></a-sphere>
+            
+            <!-- Mid Left Spire -->
+            <a-cone radius-bottom="0.03" radius-top="0" height="0.24" position="-0.25 0.18 -0.05" rotation="0 0 15" material="color: #d4af37; metalness: 0.95; roughness: 0.1"></a-cone>
+            <a-sphere radius="0.028" position="-0.28 0.3 -0.04" material="color: #ffffff; metalness: 0.9; roughness: 0.1"></a-sphere>
+            
+            <!-- Mid Right Spire -->
+            <a-cone radius-bottom="0.03" radius-top="0" height="0.24" position="0.25 0.18 -0.05" rotation="0 0 -15" material="color: #d4af37; metalness: 0.95; roughness: 0.1"></a-cone>
+            <a-sphere radius="0.028" position="0.28 0.3 -0.04" material="color: #ffffff; metalness: 0.9; roughness: 0.1"></a-sphere>
+
+            <!-- Outer Left Spire -->
+            <a-cone radius-bottom="0.025" radius-top="0" height="0.16" position="-0.48 0.11 -0.1" rotation="0 0 30" material="color: #d4af37; metalness: 0.95; roughness: 0.1"></a-cone>
+            <a-sphere radius="0.024" position="-0.52 0.18 -0.09" material="color: #03c03c; emissive: #028a2c; intensity: 0.8; roughness: 0.1"></a-sphere>
+            
+            <!-- Outer Right Spire Spire -->
+            <a-cone radius-bottom="0.025" radius-top="0" height="0.16" position="0.48 0.11 -0.1" rotation="0 0 -30" material="color: #d4af37; metalness: 0.95; roughness: 0.1"></a-cone>
+            <a-sphere radius="0.024" position="0.52 0.18 -0.09" material="color: #03c03c; emissive: #028a2c; intensity: 0.8; roughness: 0.1"></a-sphere>
+          </a-entity>
+
+          <!-- Starlight Tiara (Procedural Platinum & Stars) -->
+          <a-entity id="model-starlight-tiara" visible="false">
+            <!-- Base Platinum Band -->
+            <a-torus radius="0.86" radius-tubular="0.016" arc="180" rotation="90 0 0" position="0 0.05 -0.1" material="color: #e5e5e5; metalness: 0.95; roughness: 0.05"></a-torus>
+            
+            <!-- Star 1 (Center) -->
+            <a-octahedron radius="0.08" position="0 0.22 0" rotation="0 45 0" material="color: #ffffff; emissive: #ffffff; roughness: 0.0; opacity: 0.95"></a-octahedron>
+            <!-- Star 2 (Left) -->
+            <a-octahedron radius="0.05" position="-0.22 0.18 -0.05" rotation="10 30 10" material="color: #ffffff; emissive: #e0f7fa; roughness: 0.0; opacity: 0.9"></a-octahedron>
+            <!-- Star 3 (Right) -->
+            <a-octahedron radius="0.05" position="0.22 0.18 -0.05" rotation="-10 -30 -10" material="color: #ffffff; emissive: #e0f7fa; roughness: 0.0; opacity: 0.9"></a-octahedron>
+            <!-- Outer Diamond Accents -->
+            <a-sphere radius="0.02" position="-0.42 0.12 -0.1" material="color: #ffffff; metalness: 0.9; roughness: 0.1"></a-sphere>
+            <a-sphere radius="0.02" position="0.42 0.12 -0.1" material="color: #ffffff; metalness: 0.9; roughness: 0.1"></a-sphere>
+          </a-entity>
+        </a-entity>
+
+        <!-- Earring Anchors -->
+        <!-- Anchor 234: Left Earlobe -->
+        <a-entity mindar-face-target="anchorIndex: 234" id="left-ear-anchor">
+          <!-- Royal Pearl Cascades (Left) -->
+          <a-entity id="model-left-royal-pearl-cascades" visible="false">
+            <!-- Post -->
+            <a-sphere radius="0.012" position="0 0 0" material="color: #d4af37; metalness: 0.9; roughness: 0.15"></a-sphere>
+            <!-- Chain drop -->
+            <a-cylinder radius="0.003" height="0.06" position="0 -0.035 0" material="color: #d4af37; metalness: 0.9; roughness: 0.15"></a-cylinder>
+            <a-sphere radius="0.008" position="0 -0.065 0" material="color: #d4af37; metalness: 0.9; roughness: 0.15"></a-sphere>
+            <a-cylinder radius="0.003" height="0.04" position="0 -0.085 0" material="color: #d4af37; metalness: 0.9; roughness: 0.15"></a-cylinder>
+            <!-- South Sea Pearl -->
+            <a-sphere radius="0.022" position="0 -0.115 0.005" material="color: #fffdf5; roughness: 0.25; metalness: 0.15"></a-sphere>
+          </a-entity>
+
+          <!-- Golden Halo Hoops (Left) -->
+          <a-entity id="model-left-golden-halo-hoops" visible="false">
+            <!-- Hoop earring hanging down -->
+            <a-torus radius="0.045" radius-tubular="0.006" rotation="0 90 0" position="0 -0.045 0" material="color: #d4af37; metalness: 0.95; roughness: 0.1"></a-torus>
+          </a-entity>
+        </a-entity>
+
+        <!-- Anchor 454: Right Earlobe -->
+        <a-entity mindar-face-target="anchorIndex: 454" id="right-ear-anchor">
+          <!-- Royal Pearl Cascades (Right) -->
+          <a-entity id="model-right-royal-pearl-cascades" visible="false">
+            <!-- Post -->
+            <a-sphere radius="0.012" position="0 0 0" material="color: #d4af37; metalness: 0.9; roughness: 0.15"></a-sphere>
+            <!-- Chain drop -->
+            <a-cylinder radius="0.003" height="0.06" position="0 -0.035 0" material="color: #d4af37; metalness: 0.9; roughness: 0.15"></a-cylinder>
+            <a-sphere radius="0.008" position="0 -0.065 0" material="color: #d4af37; metalness: 0.9; roughness: 0.15"></a-sphere>
+            <a-cylinder radius="0.003" height="0.04" position="0 -0.085 0" material="color: #d4af37; metalness: 0.9; roughness: 0.15"></a-cylinder>
+            <!-- South Sea Pearl -->
+            <a-sphere radius="0.022" position="0 -0.115 0.005" material="color: #fffdf5; roughness: 0.25; metalness: 0.15"></a-sphere>
+          </a-entity>
+
+          <!-- Golden Halo Hoops (Right) -->
+          <a-entity id="model-right-golden-halo-hoops" visible="false">
+            <!-- Hoop earring hanging down -->
+            <a-torus radius="0.045" radius-tubular="0.006" rotation="0 90 0" position="0 -0.045 0" material="color: #d4af37; metalness: 0.95; roughness: 0.1"></a-torus>
+          </a-entity>
+        </a-entity>
+
+        <!-- Anchor 152: Necklaces (Chin with offset) -->
+        <a-entity mindar-face-target="anchorIndex: 152" id="neck-anchor">
+          <!-- Imperial Emerald Pendant -->
+          <a-entity id="model-imperial-emerald-pendant" visible="false">
+            <!-- Chain loop -->
+            <a-torus radius="0.32" radius-tubular="0.007" arc="190" rotation="90 0 0" position="0 -0.16 -0.1" material="color: #d4af37; metalness: 0.9; roughness: 0.15"></a-torus>
+            <!-- Pendant drop chain -->
+            <a-cylinder radius="0.004" height="0.04" position="0 -0.25 0" material="color: #d4af37; metalness: 0.9"></a-cylinder>
+            <!-- Emerald stone -->
+            <a-box width="0.04" height="0.05" depth="0.02" position="0 -0.28 0.01" material="color: #03c03c; metalness: 0.3; roughness: 0.1; emissive: #028a2c; intensity: 0.3"></a-box>
+          </a-entity>
+
+          <!-- Gilded Sunburst Choker -->
+          <a-entity id="model-gilded-sunburst-choker" visible="false">
+            <!-- Choker band -->
+            <a-torus radius="0.28" radius-tubular="0.016" arc="185" rotation="90 0 0" position="0 -0.15 -0.1" material="color: #d4af37; metalness: 0.95; roughness: 0.1"></a-torus>
+            <!-- Sunburst center decoration -->
+            <a-cone radius-bottom="0.035" radius-top="0" height="0.07" position="0 -0.21 0.01" rotation="180 0 0" material="color: #d4af37; metalness: 0.95; roughness: 0.1"></a-cone>
+            <a-sphere radius="0.01" position="0 -0.19 0.015" material="color: #ffffff; roughness: 0.0"></a-sphere>
+          </a-entity>
+
+          <!-- Royal Sapphire Collar -->
+          <a-entity id="model-royal-sapphire-collar" visible="false">
+            <!-- Heavy collar loop -->
+            <a-torus radius="0.3" radius-tubular="0.012" arc="190" rotation="90 0 0" position="0 -0.16 -0.1" material="color: #d4af37; metalness: 0.9; roughness: 0.15"></a-torus>
+            <!-- Five sapphire drops -->
+            <a-sphere radius="0.022" position="0 -0.22 0.01" material="color: #0f52ba; metalness: 0.7; roughness: 0.1; emissive: #072e7a; intensity: 0.4"></a-sphere>
+            <a-sphere radius="0.016" position="-0.1 -0.2 0.0" material="color: #0f52ba; metalness: 0.7; roughness: 0.1"></a-sphere>
+            <a-sphere radius="0.016" position="0.1 -0.2 0.0" material="color: #0f52ba; metalness: 0.7; roughness: 0.1"></a-sphere>
+            <a-sphere radius="0.012" position="-0.19 -0.16 -0.03" material="color: #0f52ba; metalness: 0.7; roughness: 0.1"></a-sphere>
+            <a-sphere radius="0.012" position="0.19 -0.16 -0.03" material="color: #0f52ba; metalness: 0.7; roughness: 0.1"></a-sphere>
+          </a-entity>
+
+          <!-- Classic Pearl Strand -->
+          <a-entity id="model-classic-pearl-strand" visible="false">
+            <!-- Pearl collar loop -->
+            <a-torus radius="0.31" radius-tubular="0.013" arc="190" rotation="90 0 0" position="0 -0.16 -0.1" material="color: #fffdf5; roughness: 0.35; metalness: 0.15"></a-torus>
+          </a-entity>
+
+          <!-- Diamond Solitaire Drop -->
+          <a-entity id="model-diamond-solitaire-drop" visible="false">
+            <!-- Thin gold chain -->
+            <a-torus radius="0.33" radius-tubular="0.005" arc="195" rotation="90 0 0" position="0 -0.16 -0.1" material="color: #d4af37; metalness: 0.9; roughness: 0.15"></a-torus>
+            <!-- Hanging chain element -->
+            <a-cylinder radius="0.002" height="0.04" position="0 -0.22 0" material="color: #d4af37; metalness: 0.9"></a-cylinder>
+            <!-- Diamond drop -->
+            <a-octahedron radius="0.022" position="0 -0.25 0.01" material="color: #ffffff; emissive: #ffffff; roughness: 0.0; opacity: 0.9"></a-octahedron>
+          </a-entity>
+        </a-entity>
+      </a-scene>
+    </div>
+
+    <script>
+      let activeItem = '';
+
+      // Parse the active item from URL
+      function getQueryParam(param) {
+        const urlParams = new URLSearchParams(window.location.search);
+        return urlParams.get(param);
+      }
+
+      // Hide all models
+      function hideAllModels() {
+        const models = [
+          'model-aura-empress-crown',
+          'model-starlight-tiara',
+          'model-left-royal-pearl-cascades',
+          'model-right-royal-pearl-cascades',
+          'model-left-golden-halo-hoops',
+          'model-right-golden-halo-hoops',
+          'model-imperial-emerald-pendant',
+          'model-gilded-sunburst-choker',
+          'model-royal-sapphire-collar',
+          'model-classic-pearl-strand',
+          'model-diamond-solitaire-drop'
+        ];
+        models.forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.setAttribute('visible', 'false');
+        });
+      }
+
+      // Show specific model based on ID
+      function activateModel(itemId) {
+        hideAllModels();
+        activeItem = itemId;
+        
+        console.log("Activating AR Model for:", itemId);
+
+        if (itemId === 'aura-empress-crown') {
+          document.getElementById('model-aura-empress-crown').setAttribute('visible', 'true');
+        } else if (itemId === 'starlight-tiara') {
+          document.getElementById('model-starlight-tiara').setAttribute('visible', 'true');
+        } else if (itemId === 'royal-pearl-cascades') {
+          document.getElementById('model-left-royal-pearl-cascades').setAttribute('visible', 'true');
+          document.getElementById('model-right-royal-pearl-cascades').setAttribute('visible', 'true');
+        } else if (itemId === 'golden-halo-hoops') {
+          document.getElementById('model-left-golden-halo-hoops').setAttribute('visible', 'true');
+          document.getElementById('model-right-golden-halo-hoops').setAttribute('visible', 'true');
+        } else if (itemId === 'imperial-emerald-pendant') {
+          document.getElementById('model-imperial-emerald-pendant').setAttribute('visible', 'true');
+        } else if (itemId === 'gilded-sunburst-choker') {
+          document.getElementById('model-gilded-sunburst-choker').setAttribute('visible', 'true');
+        } else if (itemId === 'royal-sapphire-collar') {
+          document.getElementById('model-royal-sapphire-collar').setAttribute('visible', 'true');
+        } else if (itemId === 'classic-pearl-strand') {
+          document.getElementById('model-classic-pearl-strand').setAttribute('visible', 'true');
+        } else if (itemId === 'diamond-solitaire-drop') {
+          document.getElementById('model-diamond-solitaire-drop').setAttribute('visible', 'true');
+        }
+      }
+
+      // Listen for message events from parent React App
+      window.addEventListener('message', (event) => {
+        // Safe check for message formats
+        if (event.data && event.data.type === 'CHANGE_ITEM') {
+          activateModel(event.data.itemId);
+        }
+      });
+
+      // Initialize on load
+      window.addEventListener('DOMContentLoaded', () => {
+        const item = getQueryParam('item');
+        if (item) {
+          activateModel(item);
+        }
+
+        // Setup snapshot button
+        document.getElementById('btn-snapshot').addEventListener('click', () => {
+          // Trigger camera flash effect
+          const flash = document.getElementById('flash');
+          flash.style.opacity = '1';
+          setTimeout(() => {
+            flash.style.transition = 'opacity 0.8s ease-out';
+            flash.style.opacity = '0';
+            setTimeout(() => {
+              flash.style.transition = 'none';
+            }, 800);
+          }, 100);
+
+          // Emit event to parent next.js app
+          window.parent.postMessage({ type: 'SNAPSHOT_TAKEN' }, '*');
+        });
+
+        // Setup Add to Cart button
+        document.getElementById('btn-cart').addEventListener('click', () => {
+          if (activeItem) {
+            window.parent.postMessage({ type: 'ADD_TO_CART', itemId: activeItem }, '*');
+          }
+        });
+
+        // Set tracking status text when tracking target is found
+        const sceneEl = document.querySelector('a-scene');
+        sceneEl.addEventListener('targetFound', () => {
+          document.getElementById('status-text').innerText = 'Face Tracked';
+          document.querySelector('.status-badge').style.borderColor = 'rgba(80, 200, 120, 0.4)';
+          document.querySelector('.pulse-dot').style.backgroundColor = '#50c878';
+        });
+
+        sceneEl.addEventListener('targetLost', () => {
+          document.getElementById('status-text').innerText = 'Detecting Face...';
+          document.querySelector('.status-badge').style.borderColor = 'rgba(212, 175, 55, 0.3)';
+          document.querySelector('.pulse-dot').style.backgroundColor = '#d4af37';
+        });
+      });
+    </script>
+  </body>
+</html>
